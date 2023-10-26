@@ -28,45 +28,49 @@ public class HtmlXlsConverterImpl implements HtmlXlsConverter {
     }
 
     private byte[] getTable(String htmlData) throws IOException {
-        int rowspanValue;
-        int colspanValue;
-        int rowLength;
-        int rowCount = 1;
-        int headerHeight = 0;
-
-        Row titleRow;
-        Row tableRow;
-        Cell titleCell;
-
         HSSFWorkbook workbook = new HSSFWorkbook();
         HSSFSheet sheet = workbook.createSheet();
         Document doc = Jsoup.parse(htmlData);
-
         CellStyle headerStyle = getHeaderStyle(workbook);
         CellStyle dataStyle = getDataCellStyle(workbook);
+        Row titleRow;
+        Row tableRow;
+        Cell titleCell;
+        int rowCount = 1;
+        int rowspanValue;
+        int colspanValue;
+        int rowLength;
+        int headerHeight;
+        int rowStartTable;
 
-        if (!Objects.requireNonNull(doc.select("div").first()).hasClass("table-responsive")) {
+        String className = Objects.requireNonNull(doc.select("div").first()).className();
+        String elementId = Objects.requireNonNull(doc.select("div").first()).id();
+
+        if (!className.contains("table") && !elementId.contains("table")) {
             Elements title = Objects.requireNonNull(doc.select("div").first()).children();
             titleRow = sheet.createRow(++rowCount);
             titleCell = titleRow.createCell(0);
             titleCell.setCellValue(Objects.requireNonNull(doc.select("div").first()).ownText());
+            titleCell.setCellStyle(getTitleStyle(workbook));
             sheet.addMergedRegion(new CellRangeAddress(
                     rowCount, rowCount,
-                    0, 10)
+                    0, 17)
             );
             for (Element element : title) {
                 titleRow = sheet.createRow(++rowCount);
                 titleCell = titleRow.createCell(0);
                 titleCell.setCellValue(element.text());
+                titleCell.setCellStyle(getTitleStyle(workbook));
                 sheet.addMergedRegion(new CellRangeAddress(
                         rowCount, rowCount,
-                        0, 10)
+                        0, 17)
                 );
             }
         }
-
-        int rowStartTable = rowCount - 1;
+        int rowEndTitle = rowCount - 1;
         for (Element table : doc.select("table")) {
+            headerHeight = 0;
+            rowStartTable = rowCount - 1;
             rowCount++;
             Cell cell;
             List<List<Integer>> rowspanCatalog = new ArrayList<>();
@@ -106,6 +110,9 @@ public class HtmlXlsConverterImpl implements HtmlXlsConverter {
                         cell = tableRow.createCell(i + indent);
                         cell.setCellValue(element.ownText());
                         cell.setCellStyle(headerStyle);
+                        if ((headerHeight == 1 || headerHeight == 2) && rowEndTitle == rowStartTable) {
+                            sheet.autoSizeColumn(i);
+                        }
                     }
                     colspanValue = 0;
                     if (!colspan.isEmpty() && colspan.matches("-?\\d+(.\\d+)?")) {
@@ -114,6 +121,9 @@ public class HtmlXlsConverterImpl implements HtmlXlsConverter {
                         cell = tableRow.createCell(i + indent);
                         cell.setCellValue(element.ownText());
                         cell.setCellStyle(headerStyle);
+                        if ((headerHeight == 1 || headerHeight == 2) && rowEndTitle == rowStartTable) {
+                            sheet.autoSizeColumn(i + indent, true);
+                        }
                     }
                     if (colspanValue > 1) {
                         for (int j = 0; j < colspanValue - 1; j++) {
@@ -138,8 +148,6 @@ public class HtmlXlsConverterImpl implements HtmlXlsConverter {
                         );
                     }
                     thCount++;
-                    sheet.autoSizeColumn(i, true);
-
                 }
 
                 Elements tds = row.select("td");
@@ -211,6 +219,15 @@ public class HtmlXlsConverterImpl implements HtmlXlsConverter {
         style.setBorderRight(BorderStyle.THIN);
         style.setBorderBottom(BorderStyle.THIN);
         style.setBorderTop(BorderStyle.THIN);
+
+        return style;
+    }
+
+    private CellStyle getTitleStyle(HSSFWorkbook workbook) {
+        CellStyle style = workbook.createCellStyle();
+        style.setFont(getDataSellFont(workbook));
+        style.setWrapText(true);
+        style.setVerticalAlignment(VerticalAlignment.TOP);
 
         return style;
     }
