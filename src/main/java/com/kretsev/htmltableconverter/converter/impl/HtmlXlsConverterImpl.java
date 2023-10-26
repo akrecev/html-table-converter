@@ -33,9 +33,7 @@ public class HtmlXlsConverterImpl implements HtmlXlsConverter {
         Document doc = Jsoup.parse(htmlData);
         CellStyle headerStyle = getHeaderStyle(workbook);
         CellStyle dataStyle = getDataCellStyle(workbook);
-        Row titleRow;
         Row tableRow;
-        Cell titleCell;
         int rowCount = 1;
         int rowspanValue;
         int colspanValue;
@@ -43,36 +41,38 @@ public class HtmlXlsConverterImpl implements HtmlXlsConverter {
         int headerHeight;
         int rowStartTable;
 
-        String className = Objects.requireNonNull(doc.select("div").first()).className();
-        String elementId = Objects.requireNonNull(doc.select("div").first()).id();
-
-        if (!className.contains("table") && !elementId.contains("table")) {
-            Elements title = Objects.requireNonNull(doc.select("div").first()).children();
-            titleRow = sheet.createRow(++rowCount);
-            titleCell = titleRow.createCell(0);
-            titleCell.setCellValue(Objects.requireNonNull(doc.select("div").first()).ownText());
-            titleCell.setCellStyle(getTitleStyle(workbook));
-            sheet.addMergedRegion(new CellRangeAddress(
-                    rowCount, rowCount,
-                    0, 17)
-            );
-            for (Element element : title) {
-                titleRow = sheet.createRow(++rowCount);
-                titleCell = titleRow.createCell(0);
-                titleCell.setCellValue(element.text());
-                titleCell.setCellStyle(getTitleStyle(workbook));
+        String className;
+        String elementId;
+        if (doc.select("div").first() != null) {
+            className = Objects.requireNonNull(doc.select("div").first()).className();
+            elementId = Objects.requireNonNull(doc.select("div").first()).id();
+            if (!className.contains("table") && !elementId.contains("table")) {
+                Elements title = Objects.requireNonNull(doc.select("div").first()).children();
+                makeCell(
+                        sheet.createRow(++rowCount),
+                        0,
+                        Objects.requireNonNull(doc.select("div").first()).ownText(),
+                        getTitleStyle(workbook)
+                );
                 sheet.addMergedRegion(new CellRangeAddress(
                         rowCount, rowCount,
                         0, 17)
                 );
+                for (Element element : title) {
+                    makeCell(sheet.createRow(++rowCount), 0, element.text(), getTitleStyle(workbook));
+                    sheet.addMergedRegion(new CellRangeAddress(
+                            rowCount, rowCount,
+                            0, 17)
+                    );
+                }
             }
         }
+
         int rowEndTitle = rowCount - 1;
         for (Element table : doc.select("table")) {
             headerHeight = 0;
             rowStartTable = rowCount - 1;
             rowCount++;
-            Cell cell;
             List<List<Integer>> rowspanCatalog = new ArrayList<>();
             List<Integer> rowspanList = new ArrayList<>(Collections.nCopies(1000, 0));
             for (Element row : table.select("tr")) {
@@ -107,9 +107,7 @@ public class HtmlXlsConverterImpl implements HtmlXlsConverter {
                     String colspan = element.attr("colspan");
 
                     if (!colspan.isEmpty()) {
-                        cell = tableRow.createCell(i + indent);
-                        cell.setCellValue(element.ownText());
-                        cell.setCellStyle(headerStyle);
+                        makeCell(tableRow, i + indent, element.ownText(), headerStyle);
                         if ((headerHeight == 1 || headerHeight == 2) && rowEndTitle == rowStartTable) {
                             sheet.autoSizeColumn(i);
                         }
@@ -118,9 +116,7 @@ public class HtmlXlsConverterImpl implements HtmlXlsConverter {
                     if (!colspan.isEmpty() && colspan.matches("-?\\d+(.\\d+)?")) {
                         colspanValue = Integer.parseInt(colspan);
                     } else {
-                        cell = tableRow.createCell(i + indent);
-                        cell.setCellValue(element.ownText());
-                        cell.setCellStyle(headerStyle);
+                        makeCell(tableRow, i + indent, element.ownText(), headerStyle);
                         if ((headerHeight == 1 || headerHeight == 2) && rowEndTitle == rowStartTable) {
                             sheet.autoSizeColumn(i + indent, true);
                         }
@@ -166,11 +162,7 @@ public class HtmlXlsConverterImpl implements HtmlXlsConverter {
                         position = k + 1;
                     }
                     indent += value;
-
-                    cell = tableRow.createCell(i + indent);
-                    cell.setCellValue(element.ownText());
-                    cell.setCellStyle(dataStyle);
-
+                    makeCell(tableRow, i + indent, element.ownText(), dataStyle);
                     String rowspan = element.attr("rowspan");
                     rowspanValue = 0;
                     if (!rowspan.isEmpty() && rowspan.matches("-?\\d+(.\\d+)?")) {
@@ -192,6 +184,12 @@ public class HtmlXlsConverterImpl implements HtmlXlsConverter {
         workbook.write(outByteStream);
 
         return outByteStream.toByteArray();
+    }
+
+    private void makeCell(Row row, int columnNumber, String cellValue, CellStyle style) {
+        Cell cell = row.createCell(columnNumber);
+        cell.setCellValue(cellValue);
+        cell.setCellStyle(style);
     }
 
     private CellStyle getHeaderStyle(HSSFWorkbook workbook) {
